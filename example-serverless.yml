@@ -6,7 +6,7 @@ custom:
    defaultRegion: us-east-1
    region: ${opt:region, self:custom.defaultRegion}
    stage: ${opt:stage, env:USER}
-   objectPrefix: '${self:custom.systemName}-${self:service}-${self:custom.stage}'
+   objectPrefix: '${self:service}-${self:custom.stage}'
 
 package:
    exclude:
@@ -21,7 +21,7 @@ provider:
    region: ${self:custom.region}
    stage: ${self:custom.stage}
    environment:
-      CODE_VERSION: ${file(../../../../node_modules/silvermine-serverless-utils/src/get-code-version.js):both}
+      CODE_VERSION: ${file(./node_modules/silvermine-serverless-utils/src/get-code-version.js):both}
       SLS_SVC_NAME: ${self:service}
       SLS_STAGE: ${self:custom.stage}
    iamRoleStatements:
