@@ -7,6 +7,7 @@ var _ = require('underscore'),
     resources;
 
 resources = {
+   KMSKeyGrant: require('./KMSKeyGrant'), // eslint-disable-line global-require
    SNSSQSSubscription: require('./SNSSQSSubscription'), // eslint-disable-line global-require
    CloudFrontOriginAccessIdentity: require('./CloudFrontOriginAccessIdentity'), // eslint-disable-line global-require
    DynamoDBGlobalTable: require('./DynamoDBGlobalTable'), // eslint-disable-line global-require
