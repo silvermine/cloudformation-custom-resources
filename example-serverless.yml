@@ -94,17 +94,22 @@ provider:
             - 'apigateway:*'
          Resource:
             - '*'
-      # Permissions needed for KMSKeyGrant:
-      # NOTE: these permissions will make your custom-resources Lambda have a lot of
-      # power; the Lambda function will be able to grant itself (or anyone running it)
-      # access to encrypt or decrypt data with any key in your account. You may need to
-      # impose further restrictions on this policy, restrict access to the custom-resource
-      # Lambda, etc.
+      # Permissions needed for ELBTargetGroup:
       -
          Effect: 'Allow'
          Action:
-            - 'kms:CreateGrant'
-            - 'kms:RevokeGrant'
+            - 'elasticloadbalancing:CreateTargetGroup'
+            - 'elasticloadbalancing:DeleteTargetGroup'
+            - 'elasticloadbalancing:ModifyTargetGroup'
+            - 'elasticloadbalancing:ModifyTargetGroupAttributes'
+         Resource:
+            - '*'
+      # Permissions needed for ELBTargetGroupLambdaTarget:
+      -
+         Effect: 'Allow'
+         Action:
+            - 'elasticloadbalancing:RegisterTargets'
+            - 'elasticloadbalancing:DeregisterTargets'
          Resource:
             - '*'
 

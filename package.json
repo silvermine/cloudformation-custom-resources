@@ -25,7 +25,8 @@
     "Domain Verification",
     "RuleSet activation",
     "APIGateway",
-    "regional domain name"
+    "regional domain name",
+    "application load balancer lambda"
   ],
   "author": "Jeremy Thomerson",
   "license": "MIT",
@@ -38,6 +39,9 @@
     "q": "1.5.1",
     "silvermine-lambda-utils": "git+https://github.com/silvermine/lambda-utils.git#8929f5531db49f7364de7a5e3f9bb8dabee8896e",
     "underscore": "1.9.1"
+  },
+  "peerDependencies": {
+    "aws-sdk": ">=2.373.0"
   },
   "devDependencies": {
     "@silvermine/chai-strictly-equal": "1.0.0",

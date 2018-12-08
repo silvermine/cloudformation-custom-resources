@@ -14,6 +14,8 @@ resources = {
    SimpleEmailServiceDomainVerification: require('./SimpleEmailServiceDomainVerification'), // eslint-disable-line global-require
    SimpleEmailServiceRuleSetActivation: require('./SimpleEmailServiceRuleSetActivation'), // eslint-disable-line global-require
    APIGatewayDomainName: require('./APIGatewayDomainName'), // eslint-disable-line global-require
+   ELBTargetGroup: require('./ELBTargetGroup'), // eslint-disable-line global-require
+   ELBTargetGroupLambdaTarget: require('./ELBTargetGroupLambdaTarget'), // eslint-disable-line global-require
 };
 
 module.exports = {
