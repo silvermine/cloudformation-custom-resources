@@ -23,6 +23,13 @@ module.exports = BaseResource.extend({
       return Q.ninvoke(cloudfront, 'getCloudFrontOriginAccessIdentityConfig', { Id: resourceID })
          .then(function(resp) {
             return Q.ninvoke(cloudfront, 'deleteCloudFrontOriginAccessIdentity', { Id: resourceID, IfMatch: resp.ETag });
+         })
+         .catch(function(err) {
+            if (err.code === 'NoSuchCloudFrontOriginAccessIdentity') {
+               console.log('There was no such CloudFrontOriginAccessIdentity - delete not needed');
+            } else {
+               throw err;
+            }
          });
    },
 
