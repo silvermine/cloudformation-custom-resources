@@ -1,6 +1,10 @@
 service: cloudformation-custom-resources
 
-frameworkVersion: 1.26.1
+# Note: I write these examples using the latest version of Serverless. I pin the example
+# to that version so that I know it will work for you even if you find it a year later.
+# Likely, you can remove this line and use the example with any recent version of
+# Serverless. Give it a shot if you're using a different version.
+frameworkVersion: 1.34.1
 
 custom:
    defaultRegion: us-east-1
@@ -16,12 +20,10 @@ provider:
    name: aws
    runtime: nodejs6.10
    stackTags: # NOTE: STAGE is automatically added by SLS
-      CODE_VERSION: ${file(./node_modules/silvermine-serverless-utils/src/get-code-version.js):both}
       SLS_SVC_NAME: ${self:service}
    region: ${self:custom.region}
    stage: ${self:custom.stage}
    environment:
-      CODE_VERSION: ${file(./node_modules/silvermine-serverless-utils/src/get-code-version.js):both}
       SLS_SVC_NAME: ${self:service}
       SLS_STAGE: ${self:custom.stage}
    iamRoleStatements:
@@ -96,6 +98,14 @@ provider:
 functions:
    customResources:
       name: ${self:custom.objectPrefix}
-      handler: src/CustomResourceHandler.handler
+      handler: node_modules/@silvermine/cloudformation-custom-resources/src/CustomResourceHandler.handler
       memorySize: 256
       timeout: 300
+
+resources:
+   Outputs:
+      CustomResourcesServiceToken:
+         Description: The ARN of the custom resources Lambda function to use as a service token when using a custom resource.
+         Value: { 'Fn::GetAtt': [ 'CustomResourcesLambdaFunction', 'Arn' ] }
+         Export:
+            Name: '${self:custom.objectPrefix}-ServiceToken'
