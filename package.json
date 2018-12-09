@@ -4,7 +4,7 @@
   "description": "Collection of custom resources for CloudFormation that anyone can use.",
   "main": "src/index.js",
   "scripts": {
-    "test": "check-node-version --package --print && ./node_modules/.bin/istanbul cover --root src --include-all-sources ./node_modules/.bin/_mocha -- -r ./tests/setup/before.js -R spec 'tests/**/*.test.js'"
+    "test": "./node_modules/.bin/istanbul cover --root src --include-all-sources ./node_modules/.bin/_mocha -- -r ./tests/setup/before.js -R spec 'tests/**/*.test.js'"
   },
   "engines": {
     "node": "8.10",
