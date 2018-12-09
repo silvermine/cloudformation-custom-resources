@@ -32,12 +32,12 @@ module.exports = {
          Resource = resources[type];
          resource = new Resource(evt);
          fn = function() {
-            return Q.promised(resource['handle' + evt.RequestType].bind(resource))()
+            return Q.promised(resource[`handle${evt.RequestType}`].bind(resource))()
                .catch(resource.sendError.bind(resource));
          };
       } else {
          resource = new BaseResource(evt);
-         fn = resource.sendError.bind(resource, new Error('Unsupported resource type: ' + type));
+         fn = resource.sendError.bind(resource, new Error(`Unsupported resource type: ${type}`));
       }
 
       handler(fn, context, cb);

@@ -29,7 +29,7 @@ module.exports = BaseResource.extend({
    },
 
    doUpdate: function(resourceID) {
-      throw new Error('Updates for custom domains are not supported (' + resourceID + ')');
+      throw new Error(`Updates for custom domains are not supported (${resourceID})`);
    },
 
 });

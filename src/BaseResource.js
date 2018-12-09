@@ -71,13 +71,14 @@ module.exports = Class.extend({
    },
 
    _randomResourceID: function() {
-      return this._event.LogicalResourceId + '-' + Math.random().toString(36).replace(/[^a-z]+/g, '');
+      return `${this._event.LogicalResourceId}-${Math.random().toString(36).replace(/[^a-z]+/g, '')}`;
    },
 
    sendError: function(err) {
       var resp = this._createResponse('FAILED', null, null, err.message);
 
       console.log('ERROR:', err, err.stack);
+
       return this._sendResponse(resp);
    },
 

@@ -11,8 +11,9 @@ module.exports = BaseResource.extend({
    },
 
    doDelete: function(resourceID) {
-      if (resourceID.startsWith(this._event.LogicalResourceId + '-')) {
+      if (resourceID.startsWith(`${this._event.LogicalResourceId}-`)) {
          console.log('no delete to handle - not a real subscription ARN');
+
          return Q.when({});
       }
 
@@ -41,6 +42,7 @@ module.exports = BaseResource.extend({
       return Q.ninvoke(sns, 'subscribe', { Protocol: 'sqs', TopicArn: topicARN, Endpoint: queueARN })
          .then(function(resp) {
             console.log('subscribe response:', JSON.stringify(resp));
+
             return { PhysicalResourceId: resp.SubscriptionArn, SubscriptionArn: resp.SubscriptionArn };
          });
    },
@@ -53,6 +55,7 @@ module.exports = BaseResource.extend({
       return Q.ninvoke(sns, 'unsubscribe', { SubscriptionArn: resourceID })
          .then(function(resp) {
             console.log('unsubscribe response:', JSON.stringify(resp));
+
             return {};
          });
    },
@@ -62,6 +65,7 @@ module.exports = BaseResource.extend({
           region = parts[3];
 
       console.log('creating SNS for region "%s" from ARN-like string "%s"', region, likeARN);
+
       return new AWS.SNS({ region: region });
    },
 

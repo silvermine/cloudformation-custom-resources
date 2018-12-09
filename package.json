@@ -45,6 +45,7 @@
   },
   "devDependencies": {
     "@silvermine/chai-strictly-equal": "1.0.0",
+    "@silvermine/eslint-config": "2.0.0-preview.2",
     "chai": "4.2.0",
     "check-node-version": "3.2.0",
     "coveralls": "3.0.2",

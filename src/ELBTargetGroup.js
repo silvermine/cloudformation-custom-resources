@@ -97,6 +97,7 @@ module.exports = BaseResource.extend({
             // otherwise, the resource never really was created, so we can't delete it,
             // and we log and squash this error
             console.log('Warning: squashed error:', err, err.stack);
+
             return { PhysicalResourceId: resourceID };
          });
    },
