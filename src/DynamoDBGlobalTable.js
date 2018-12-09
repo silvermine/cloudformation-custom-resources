@@ -59,6 +59,7 @@ module.exports = BaseResource.extend({
           copyTableRegions = _.chain(props.ReplicationGroup).pluck('RegionName').without(AWS_REGION).value();
 
       console.log('Pausing ten seconds before starting create for global table %s in regions %s', tableName, allRegions);
+
       return Q.delay(10000)
          .then(this._ensureTableCopiedToRegions.bind(this, tableName, copyTableRegions))
          .then(this._printDescriptionsOfTables.bind(this, tableName, allRegions)) // for helpful debugging
@@ -73,6 +74,7 @@ module.exports = BaseResource.extend({
           oldCopyTableRegions = _.without(oldRegions, AWS_REGION);
 
       console.log('Pausing ten seconds before starting update for global table %s in regions %s', tableName, allRegions);
+
       return Q.delay(10000)
          .then(this._ensureTableCopiedToRegions.bind(this, tableName, copyTableRegions))
          .then(this._printDescriptionsOfTables.bind(this, tableName, _.uniq(allRegions.concat(oldRegions)))) // for helpful debugging
@@ -86,6 +88,7 @@ module.exports = BaseResource.extend({
             }
 
             console.log('Not deleting table %s from regions %s because DeleteUnneededTables was not truthy', tableName, regionsToDelete);
+
             return globalTableCloudFormationResp;
          }.bind(this));
    },
@@ -100,6 +103,7 @@ module.exports = BaseResource.extend({
       }
 
       console.log('Not deleting replica %s tables in %s because DeleteUnneededTables was not truthy', tableName, copyTableRegions);
+
       return Q.when({ PhysicalResourceId: props.GlobalTableName });
    },
 
@@ -110,7 +114,7 @@ module.exports = BaseResource.extend({
       return this._describeTableUntilState(tableName, AWS_REGION, [ 'CREATING', 'ACTIVE', 'UPDATING' ])
          .then(function(masterDesc) {
             if (!self._hasRequiredStreamSpec(masterDesc)) {
-               throw new Error('The master table ' + tableName + ' does not have the required NEW_AND_OLD_IMAGES stream enabled');
+               throw new Error(`The master table ${tableName} does not have the required NEW_AND_OLD_IMAGES stream enabled`);
             }
 
             return self._listTags(AWS_REGION, masterDesc.TableArn)
@@ -133,11 +137,13 @@ module.exports = BaseResource.extend({
 
                if (params) {
                   console.log('Updating a copy of DynamoDB table %s in %s: %j', tableName, region, params);
+
                   return Q.ninvoke(dyn, 'updateTable', params);
                }
             } else {
                params = self._makeCreateTableParamsFromDescription(masterDesc);
                console.log('Creating a copy of DynamoDB table %s in %s: %j', tableName, region, params);
+
                return Q.ninvoke(dyn, 'createTable', params);
             }
 
@@ -150,10 +156,12 @@ module.exports = BaseResource.extend({
                .then(function(copyTags) {
                   if (_.isEqual(masterTags, copyTags)) {
                      console.log('No change needed for tags on %s in %s: %j', tableName, region, copyTags);
+
                      return;
                   }
 
                   console.log('Tagging table %s in %s with tags %j', tableName, region, masterTags);
+
                   return Q.ninvoke(dyn, 'tagResource', { ResourceArn: arn, Tags: masterTags });
                });
          });
@@ -172,6 +180,7 @@ module.exports = BaseResource.extend({
             .catch(function(err) {
                if (err.code === 'ResourceNotFoundException') {
                   console.log('Could not list tags for %s because of ResourceNotFoundException', arn);
+
                   return false;
                }
 
@@ -180,11 +189,13 @@ module.exports = BaseResource.extend({
             .then(function(tagsResp) {
                if (tagsResp) {
                   if (tagsResp.NextToken) {
-                     def.reject(new Error('Too many tags on table ' + arn + ' for this simplistic tag replication'));
+                     def.reject(new Error(`Too many tags on table ${arn} for this simplistic tag replication`));
+
                      return;
                   }
 
                   def.resolve(tagsResp.Tags);
+
                   return;
                }
 
@@ -221,6 +232,7 @@ module.exports = BaseResource.extend({
             .then(function(desc) {
                if (desc) {
                   console.log('Deleting table %s in region %s', tableName, region);
+
                   return Q.ninvoke(dyn, 'deleteTable', { TableName: tableName })
                      .then(function() {
                         console.log('Done deleting table %s in region %s', tableName, region);
@@ -238,6 +250,7 @@ module.exports = BaseResource.extend({
          .catch(function(err) {
             if (err.code === 'ResourceNotFoundException') {
                console.log('Table %s does not exist in %s', tableName, region);
+
                return false;
             }
 
@@ -318,6 +331,7 @@ module.exports = BaseResource.extend({
             var newGSI = _.pick(gsi, 'IndexName', 'KeySchema', 'Projection');
 
             newGSI.ProvisionedThroughput = _.pick(gsi.ProvisionedThroughput, 'ReadCapacityUnits', 'WriteCapacityUnits');
+
             return newGSI;
          });
       }
@@ -387,6 +401,7 @@ module.exports = BaseResource.extend({
       if (baseParamsAreEqual && _.isEmpty(params.GlobalSecondaryIndexUpdates)) {
          // There are no updates to be made
          console.log('There are no updates to be made to %s in %s', tableName, destRegion);
+
          return false;
       } else if (_.isEmpty(params.GlobalSecondaryIndexUpdates)) {
          console.log('There are no GlobalSecondaryIndexUpdates to be made to %s in %s', tableName, destRegion);
@@ -415,10 +430,12 @@ module.exports = BaseResource.extend({
             var params = _.pick(props, 'GlobalTableName', 'ReplicationGroup');
 
             console.log('Creating global table: %j', params);
+
             return Q.ninvoke(dynamo, 'createGlobalTable', params);
          })
          .then(function(resp) {
             console.log('createGlobalTable response: %j', resp);
+
             return { PhysicalResourceId: props.GlobalTableName, Arn: resp.GlobalTableDescription.GlobalTableArn };
          });
    },
@@ -444,12 +461,14 @@ module.exports = BaseResource.extend({
 
       if (_.isEmpty(params.ReplicaUpdates)) {
          console.log('No update needed for global table %s', tableName);
+
          return Q.when({ PhysicalResourceId: props.GlobalTableName, Arn: desc.GlobalTableArn });
       }
 
       return this._waitForTablesCreatingOrActive(tableName, desiredRegions.concat(existingRegions))
          .then(function() {
             console.log('Updating global table %s with params: %j', tableName, params);
+
             return Q.ninvoke(dynamo, 'updateGlobalTable', params);
          })
          .then(_.constant({ PhysicalResourceId: props.GlobalTableName, Arn: desc.GlobalTableArn }));
@@ -462,6 +481,7 @@ module.exports = BaseResource.extend({
       // then back to ACTIVE. If we happen to try to updateGlobalTable before the table is
       // ACTIVE, we will get an error.
       console.log('Waiting for %s in %s to be CREATING or ACTIVE', tableName, regions);
+
       return Q.all(_.map(regions, function(region) {
          return this._describeTableUntilState(tableName, region, [ 'CREATING', 'ACTIVE' ]);
       }.bind(this)));
