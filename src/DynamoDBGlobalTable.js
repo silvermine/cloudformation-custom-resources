@@ -59,8 +59,8 @@ module.exports = BaseResource.extend({
           copyTableRegions = _.chain(props.ReplicationGroup).pluck('RegionName').without(AWS_REGION).value();
 
       console.log('Pausing ten seconds before starting create for global table %s in regions %s', tableName, allRegions);
-
       return Q.delay(10000)
+         .then(this._printDescriptionsOfTables.bind(this, tableName, [ AWS_REGION ])) // for helpful debugging
          .then(this._ensureTableCopiedToRegions.bind(this, tableName, copyTableRegions))
          .then(this._printDescriptionsOfTables.bind(this, tableName, allRegions)) // for helpful debugging
          .then(this._ensureGlobalTableConsistent.bind(this, props));
@@ -74,8 +74,8 @@ module.exports = BaseResource.extend({
           oldCopyTableRegions = _.without(oldRegions, AWS_REGION);
 
       console.log('Pausing ten seconds before starting update for global table %s in regions %s', tableName, allRegions);
-
       return Q.delay(10000)
+         .then(this._printDescriptionsOfTables.bind(this, tableName, [ AWS_REGION ])) // for helpful debugging
          .then(this._ensureTableCopiedToRegions.bind(this, tableName, copyTableRegions))
          .then(this._printDescriptionsOfTables.bind(this, tableName, _.uniq(allRegions.concat(oldRegions)))) // for helpful debugging
          .then(this._ensureGlobalTableConsistent.bind(this, props))
@@ -88,7 +88,6 @@ module.exports = BaseResource.extend({
             }
 
             console.log('Not deleting table %s from regions %s because DeleteUnneededTables was not truthy', tableName, regionsToDelete);
-
             return globalTableCloudFormationResp;
          }.bind(this));
    },
@@ -103,7 +102,6 @@ module.exports = BaseResource.extend({
       }
 
       console.log('Not deleting replica %s tables in %s because DeleteUnneededTables was not truthy', tableName, copyTableRegions);
-
       return Q.when({ PhysicalResourceId: props.GlobalTableName });
    },
 
@@ -114,7 +112,7 @@ module.exports = BaseResource.extend({
       return this._describeTableUntilState(tableName, AWS_REGION, [ 'CREATING', 'ACTIVE', 'UPDATING' ])
          .then(function(masterDesc) {
             if (!self._hasRequiredStreamSpec(masterDesc)) {
-               throw new Error(`The master table ${tableName} does not have the required NEW_AND_OLD_IMAGES stream enabled`);
+               throw new Error('The master table ' + tableName + ' does not have the required NEW_AND_OLD_IMAGES stream enabled');
             }
 
             return self._listTags(AWS_REGION, masterDesc.TableArn)
@@ -137,13 +135,11 @@ module.exports = BaseResource.extend({
 
                if (params) {
                   console.log('Updating a copy of DynamoDB table %s in %s: %j', tableName, region, params);
-
                   return Q.ninvoke(dyn, 'updateTable', params);
                }
             } else {
                params = self._makeCreateTableParamsFromDescription(masterDesc);
                console.log('Creating a copy of DynamoDB table %s in %s: %j', tableName, region, params);
-
                return Q.ninvoke(dyn, 'createTable', params);
             }
 
@@ -156,12 +152,10 @@ module.exports = BaseResource.extend({
                .then(function(copyTags) {
                   if (_.isEqual(masterTags, copyTags)) {
                      console.log('No change needed for tags on %s in %s: %j', tableName, region, copyTags);
-
                      return;
                   }
 
                   console.log('Tagging table %s in %s with tags %j', tableName, region, masterTags);
-
                   return Q.ninvoke(dyn, 'tagResource', { ResourceArn: arn, Tags: masterTags });
                });
          });
@@ -180,7 +174,6 @@ module.exports = BaseResource.extend({
             .catch(function(err) {
                if (err.code === 'ResourceNotFoundException') {
                   console.log('Could not list tags for %s because of ResourceNotFoundException', arn);
-
                   return false;
                }
 
@@ -189,13 +182,11 @@ module.exports = BaseResource.extend({
             .then(function(tagsResp) {
                if (tagsResp) {
                   if (tagsResp.NextToken) {
-                     def.reject(new Error(`Too many tags on table ${arn} for this simplistic tag replication`));
-
+                     def.reject(new Error('Too many tags on table ' + arn + ' for this simplistic tag replication'));
                      return;
                   }
 
                   def.resolve(tagsResp.Tags);
-
                   return;
                }
 
@@ -232,7 +223,6 @@ module.exports = BaseResource.extend({
             .then(function(desc) {
                if (desc) {
                   console.log('Deleting table %s in region %s', tableName, region);
-
                   return Q.ninvoke(dyn, 'deleteTable', { TableName: tableName })
                      .then(function() {
                         console.log('Done deleting table %s in region %s', tableName, region);
@@ -250,7 +240,6 @@ module.exports = BaseResource.extend({
          .catch(function(err) {
             if (err.code === 'ResourceNotFoundException') {
                console.log('Table %s does not exist in %s', tableName, region);
-
                return false;
             }
 
@@ -316,9 +305,15 @@ module.exports = BaseResource.extend({
    },
 
    _makeCreateTableParamsFromDescription: function(desc) {
-      var params = _.pick(desc, 'AttributeDefinitions', 'KeySchema', 'TableName', 'StreamSpecification');
+      var params = _.pick(desc, 'AttributeDefinitions', 'KeySchema', 'TableName', 'StreamSpecification'),
+          srcBillingMode = (desc.BillingModeSummary ? desc.BillingModeSummary.BillingMode : null);
 
-      params.ProvisionedThroughput = _.pick(desc.ProvisionedThroughput, 'ReadCapacityUnits', 'WriteCapacityUnits');
+      if (srcBillingMode) {
+         params.BillingMode = srcBillingMode;
+      }
+      if (srcBillingMode !== 'PAY_PER_REQUEST') {
+         params.ProvisionedThroughput = _.pick(desc.ProvisionedThroughput, 'ReadCapacityUnits', 'WriteCapacityUnits');
+      }
 
       if (!_.isEmpty(desc.LocalSecondaryIndexes)) {
          params.LocalSecondaryIndexes = _.map(desc.LocalSecondaryIndexes, function(lsi) {
@@ -330,8 +325,9 @@ module.exports = BaseResource.extend({
          params.GlobalSecondaryIndexes = _.map(desc.GlobalSecondaryIndexes, function(gsi) {
             var newGSI = _.pick(gsi, 'IndexName', 'KeySchema', 'Projection');
 
-            newGSI.ProvisionedThroughput = _.pick(gsi.ProvisionedThroughput, 'ReadCapacityUnits', 'WriteCapacityUnits');
-
+            if (srcBillingMode !== 'PAY_PER_REQUEST') {
+               newGSI.ProvisionedThroughput = _.pick(gsi.ProvisionedThroughput, 'ReadCapacityUnits', 'WriteCapacityUnits');
+            }
             return newGSI;
          });
       }
@@ -342,7 +338,10 @@ module.exports = BaseResource.extend({
    _makeUpdateTableParams: function(tableName, destRegion, master, dest) {
       var params = _.pick(master, 'AttributeDefinitions', 'TableName'),
           destParams = _.pick(dest, 'AttributeDefinitions', 'TableName'),
-          baseParamsAreEqual = _.isEqual(params, destParams);
+          srcBillingMode = (master.BillingModeSummary ? master.BillingModeSummary.BillingMode : null),
+          destBillingMode = (dest.BillingModeSummary ? dest.BillingModeSummary.BillingMode : null),
+          baseParamsAreEqual = _.isEqual(params, destParams) && (srcBillingMode === destBillingMode),
+          indexesBeingUpdated = [];
 
       // NOTE: on updates we do not copy the provisioned throughput from the master table
       // because we never manage throughput through CloudFormation ... we always intend to
@@ -353,6 +352,13 @@ module.exports = BaseResource.extend({
 
       // Similarly, we do not update the stream status because it should never change
       // after the initial creation since global tables require a specific type of stream.
+
+      if (srcBillingMode) {
+         params.BillingMode = srcBillingMode;
+      }
+      if (srcBillingMode !== 'PAY_PER_REQUEST') {
+         params.ProvisionedThroughput = _.pick(master.ProvisionedThroughput, 'ReadCapacityUnits', 'WriteCapacityUnits');
+      }
 
       params.GlobalSecondaryIndexUpdates = [];
 
@@ -372,13 +378,41 @@ module.exports = BaseResource.extend({
             );
 
             params.GlobalSecondaryIndexUpdates.push({ Delete: _.pick(masterGSI, 'IndexName') });
+            indexesBeingUpdated.push(masterGSI.IndexName);
          } else if (!destGSI) {
             console.log('Need to create index %s:%s in %s', tableName, masterGSI.IndexName, destRegion);
             gsiUpdate = { Create: _.pick(masterGSI, 'IndexName', 'KeySchema', 'Projection') };
-            gsiUpdate.Create.ProvisionedThroughput = _.pick(masterGSI.ProvisionedThroughput, 'ReadCapacityUnits', 'WriteCapacityUnits');
+            if (srcBillingMode === 'PROVISIONED') {
+               gsiUpdate.Create.ProvisionedThroughput = _.pick(masterGSI.ProvisionedThroughput, 'ReadCapacityUnits', 'WriteCapacityUnits');
+            }
             params.GlobalSecondaryIndexUpdates.push(gsiUpdate);
+            indexesBeingUpdated.push(masterGSI.IndexName);
          }
       });
+
+      // If the source table's billing mode is 'PROVISIONED', but the destination table's
+      // mode is 'PAY_PER_REQUEST', then we will be changing it to PROVISIONED, and thus
+      // need to update all the indexes to include the provisioned capacity.
+      // Note that there's some oddness here: when the table's billing mode is
+      // 'PROVISIONED', you may not actually get back the BillingModeSummary in the table
+      // description. That's why we use `srcBillingMode !== 'PAY_PER_REQUEST'` everywhere
+      // in this class - because if it's pay per request, you'll always get the billing
+      // mode back.
+      if (srcBillingMode !== 'PAY_PER_REQUEST' && destBillingMode !== 'PROVISIONED') {
+         _.each(master.GlobalSecondaryIndexes, function(masterGSI) {
+            if (_.contains(indexesBeingUpdated, masterGSI.IndexName) || masterGSI.IndexStatus === 'DELETING') {
+               // This index is already in our call params, or it's being deleted.
+               return;
+            }
+
+            params.GlobalSecondaryIndexUpdates.push({
+               Update: {
+                  IndexName: masterGSI.IndexName,
+                  ProvisionedThroughput: _.pick(masterGSI.ProvisionedThroughput, 'ReadCapacityUnits', 'WriteCapacityUnits'),
+               },
+            });
+         });
+      }
 
       // Now find indexes that only the destination table has, since they must have been
       // deleted from the master table.
@@ -401,7 +435,6 @@ module.exports = BaseResource.extend({
       if (baseParamsAreEqual && _.isEmpty(params.GlobalSecondaryIndexUpdates)) {
          // There are no updates to be made
          console.log('There are no updates to be made to %s in %s', tableName, destRegion);
-
          return false;
       } else if (_.isEmpty(params.GlobalSecondaryIndexUpdates)) {
          console.log('There are no GlobalSecondaryIndexUpdates to be made to %s in %s', tableName, destRegion);
@@ -430,12 +463,10 @@ module.exports = BaseResource.extend({
             var params = _.pick(props, 'GlobalTableName', 'ReplicationGroup');
 
             console.log('Creating global table: %j', params);
-
             return Q.ninvoke(dynamo, 'createGlobalTable', params);
          })
          .then(function(resp) {
             console.log('createGlobalTable response: %j', resp);
-
             return { PhysicalResourceId: props.GlobalTableName, Arn: resp.GlobalTableDescription.GlobalTableArn };
          });
    },
@@ -461,14 +492,12 @@ module.exports = BaseResource.extend({
 
       if (_.isEmpty(params.ReplicaUpdates)) {
          console.log('No update needed for global table %s', tableName);
-
          return Q.when({ PhysicalResourceId: props.GlobalTableName, Arn: desc.GlobalTableArn });
       }
 
       return this._waitForTablesCreatingOrActive(tableName, desiredRegions.concat(existingRegions))
          .then(function() {
             console.log('Updating global table %s with params: %j', tableName, params);
-
             return Q.ninvoke(dynamo, 'updateGlobalTable', params);
          })
          .then(_.constant({ PhysicalResourceId: props.GlobalTableName, Arn: desc.GlobalTableArn }));
@@ -481,7 +510,6 @@ module.exports = BaseResource.extend({
       // then back to ACTIVE. If we happen to try to updateGlobalTable before the table is
       // ACTIVE, we will get an error.
       console.log('Waiting for %s in %s to be CREATING or ACTIVE', tableName, regions);
-
       return Q.all(_.map(regions, function(region) {
          return this._describeTableUntilState(tableName, region, [ 'CREATING', 'ACTIVE' ]);
       }.bind(this)));
