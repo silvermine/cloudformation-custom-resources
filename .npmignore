@@ -2,3 +2,5 @@
 .travis.yml
 Gruntfile.js
 tests/**
+.serverless
+coverage
