@@ -7,8 +7,8 @@
     "test": "./node_modules/.bin/istanbul cover --root src --include-all-sources ./node_modules/.bin/_mocha -- -r ./tests/setup/before.js -R spec 'tests/**/*.test.js'"
   },
   "engines": {
-    "node": "8.10",
-    "npm": ">= 6.4.1"
+    "node": ">=8.10.0",
+    "npm": "6.4.1"
   },
   "repository": {
     "type": "git",
