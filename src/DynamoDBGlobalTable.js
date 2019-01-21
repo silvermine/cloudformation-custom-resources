@@ -356,7 +356,12 @@ module.exports = BaseResource.extend({
       if (srcBillingMode) {
          params.BillingMode = srcBillingMode;
       }
-      if (srcBillingMode !== 'PAY_PER_REQUEST') {
+
+      // The provisioned throughput setting should only be copied when switching a table
+      // from on-demand to provisioned. In this case, the table needs an "initial"
+      // throughput set. However, in all other cases we don't want to copy this value (see
+      // the note above)
+      if (srcBillingMode !== 'PAY_PER_REQUEST' && destBillingMode === 'PAY_PER_REQUEST') {
          params.ProvisionedThroughput = _.pick(master.ProvisionedThroughput, 'ReadCapacityUnits', 'WriteCapacityUnits');
       }
 
@@ -398,7 +403,7 @@ module.exports = BaseResource.extend({
       // description. That's why we use `srcBillingMode !== 'PAY_PER_REQUEST'` everywhere
       // in this class - because if it's pay per request, you'll always get the billing
       // mode back.
-      if (srcBillingMode !== 'PAY_PER_REQUEST' && destBillingMode !== 'PROVISIONED') {
+      if (srcBillingMode !== 'PAY_PER_REQUEST' && destBillingMode === 'PAY_PER_REQUEST') {
          _.each(master.GlobalSecondaryIndexes, function(masterGSI) {
             if (_.contains(indexesBeingUpdated, masterGSI.IndexName) || masterGSI.IndexStatus === 'DELETING') {
                // This index is already in our call params, or it's being deleted.
