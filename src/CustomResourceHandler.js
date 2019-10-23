@@ -25,6 +25,9 @@ resources = {
    APIGatewayDomainName: require('./APIGatewayDomainName'), // eslint-disable-line global-require
    ELBTargetGroup: require('./ELBTargetGroup'), // eslint-disable-line global-require
    ELBTargetGroupLambdaTarget: require('./ELBTargetGroupLambdaTarget'), // eslint-disable-line global-require
+   ElasticSearchClusterSettings: require('./ElasticSearchClusterSettings'), // eslint-disable-line global-require
+   ElasticSearchIndex: require('./ElasticSearchIndex'), // eslint-disable-line global-require
+   ElasticSearchIndexAlias: require('./ElasticSearchIndexAlias'), // eslint-disable-line global-require
 };
 
 module.exports = {
