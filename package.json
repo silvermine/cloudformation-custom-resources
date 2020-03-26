@@ -18,7 +18,6 @@
     "CloudFormation",
     "custom resources",
     "AWS",
-    "OriginAccessIdentity",
     "DynamoDB global table",
     "SimpleEmailService",
     "SES",

@@ -9,7 +9,6 @@ var _ = require('underscore'),
 resources = {
    KMSKeyGrant: require('./KMSKeyGrant'), // eslint-disable-line global-require
    SNSSQSSubscription: require('./SNSSQSSubscription'), // eslint-disable-line global-require
-   CloudFrontOriginAccessIdentity: require('./CloudFrontOriginAccessIdentity'), // eslint-disable-line global-require
    // This resource will be named "SimpleDynamoDBGlobalTable" only in 1.0.0-rc3 for the
    // transition from the old DynamoDBGlobalTable resource to the newer, simpler one. See
    // the code below that helps with this transition. In 1.0.0-rc4 and subsequent
