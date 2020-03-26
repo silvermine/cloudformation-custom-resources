@@ -45,18 +45,6 @@ provider:
             - 'sns:Unsubscribe'
          Resource:
             - '*'
-      # Permissions needed for CloudFrontOriginAccessIdentity:
-      -
-         Effect: 'Allow'
-         Action:
-            - 'cloudfront:CreateCloudFrontOriginAccessIdentity'
-            - 'cloudfront:DeleteCloudFrontOriginAccessIdentity'
-            - 'cloudfront:GetCloudFrontOriginAccessIdentity'
-            - 'cloudfront:GetCloudFrontOriginAccessIdentityConfig'
-            - 'cloudfront:ListCloudFrontOriginAccessIdentities'
-            - 'cloudfront:UpdateCloudFrontOriginAccessIdentity'
-         Resource:
-            - '*'
       # Permissions needed for DynamoDBGlobalTable:
       -
          Effect: 'Allow'
