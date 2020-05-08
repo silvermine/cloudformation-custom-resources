@@ -353,7 +353,7 @@ module.exports = BaseResource.extend({
       // Similarly, we do not update the stream status because it should never change
       // after the initial creation since global tables require a specific type of stream.
 
-      if (srcBillingMode) {
+      if (srcBillingMode && srcBillingMode !== destBillingMode) {
          params.BillingMode = srcBillingMode;
       }
 
@@ -387,7 +387,7 @@ module.exports = BaseResource.extend({
          } else if (!destGSI) {
             console.log('Need to create index %s:%s in %s', tableName, masterGSI.IndexName, destRegion);
             gsiUpdate = { Create: _.pick(masterGSI, 'IndexName', 'KeySchema', 'Projection') };
-            if (srcBillingMode === 'PROVISIONED') {
+            if (srcBillingMode !== 'PAY_PER_REQUEST') {
                gsiUpdate.Create.ProvisionedThroughput = _.pick(masterGSI.ProvisionedThroughput, 'ReadCapacityUnits', 'WriteCapacityUnits');
             }
             params.GlobalSecondaryIndexUpdates.push(gsiUpdate);
