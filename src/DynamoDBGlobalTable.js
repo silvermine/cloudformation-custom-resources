@@ -387,7 +387,7 @@ module.exports = BaseResource.extend({
          } else if (!destGSI) {
             console.log('Need to create index %s:%s in %s', tableName, masterGSI.IndexName, destRegion);
             gsiUpdate = { Create: _.pick(masterGSI, 'IndexName', 'KeySchema', 'Projection') };
-            if (srcBillingMode === 'PROVISIONED') {
+            if (srcBillingMode !== 'PAY_PER_REQUEST') {
                gsiUpdate.Create.ProvisionedThroughput = _.pick(masterGSI.ProvisionedThroughput, 'ReadCapacityUnits', 'WriteCapacityUnits');
             }
             params.GlobalSecondaryIndexUpdates.push(gsiUpdate);
