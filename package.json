@@ -4,6 +4,7 @@
   "description": "Collection of custom resources for CloudFormation that anyone can use.",
   "main": "src/index.js",
   "scripts": {
+    "commitlint": "commitlint --from 66cbf40",
     "test": "check-node-version --npm 6.13.4 && ./node_modules/.bin/istanbul cover --root src --include-all-sources ./node_modules/.bin/_mocha -- -r ./tests/setup/before.js -R spec 'tests/**/*.test.js'"
   },
   "repository": {
@@ -41,8 +42,8 @@
   "devDependencies": {
     "@silvermine/chai-strictly-equal": "1.0.0",
     "@silvermine/eslint-config": "3.0.0-rc.0",
+    "@silvermine/standardization": "1.0.1",
     "chai": "4.2.0",
-    "check-node-version": "3.2.0",
     "coveralls": "3.0.2",
     "eslint": "6.8.0",
     "grunt": "1.0.3",
