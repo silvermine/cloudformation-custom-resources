@@ -28,8 +28,53 @@ module.exports = BaseResource.extend({
          .thenResolve({ PhysicalResourceId: resourceID });
    },
 
-   doUpdate: function(resourceID) {
-      throw new Error(`Updates for custom domains are not supported (${resourceID})`);
+   doUpdate: function(resourceID, props, oldProps) {
+      const cloneOfNewProps = JSON.parse(JSON.stringify(props)),
+            cloneOfOldProps = JSON.parse(JSON.stringify(oldProps));
+
+      // Remove the properties that *can* be updated (there's probably more)
+      delete cloneOfNewProps.regionalCertificateArn;
+      delete cloneOfOldProps.regionalCertificateArn;
+
+      // Then check to see if any of the properties that remain (i.e. those that cannot be
+      // updated) were changed
+      if (!_.isEqual(cloneOfNewProps, cloneOfOldProps)) {
+         // Log the old vs new props rather than putting the data in the error message as
+         // the response can only be 4,096 bytes long. See:
+         // https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/cloudformation-limits.html
+         console.log(
+            `ERROR Not updating ${resourceID} as one or more of the changed fields does not support updates`
+            + ` Old: ${JSON.stringify(oldProps)} New: ${JSON.stringify(props)}`
+         );
+         throw new Error(`One or more of the changed fields does not support updates (${resourceID})`);
+      }
+
+      const patchOperations = [];
+
+      // eslint-disable-next-line max-len
+      if (props.regionalCertificateArn && oldProps.regionalCertificateArn && props.regionalCertificateArn !== oldProps.regionalCertificateArn) {
+         patchOperations.push({
+            op: 'replace',
+            path: '/regionalCertificateArn',
+            value: props.regionalCertificateArn,
+         });
+      }
+
+      if (_.isEmpty(patchOperations)) {
+         // Log the old vs new props rather than putting the data in the error message as
+         // the response can only be 4,096 bytes long. See:
+         // https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/cloudformation-limits.html
+         console.log(
+            `ERROR Not performing any patch operations on ${resourceID} as one or more of the changed fields does not support updates`
+            + ` Old: ${JSON.stringify(oldProps)} New: ${JSON.stringify(props)}`
+         );
+         throw new Error(`One or more of the changed fields does not support updates (${resourceID})`);
+      }
+
+      return Q.ninvoke(apigw, 'updateDomainName', { domainName: resourceID, patchOperations })
+         .then(function(resp) {
+            return { PhysicalResourceId: resp.domainName, regionalDomainName: resp.regionalDomainName };
+         });
    },
 
 });
