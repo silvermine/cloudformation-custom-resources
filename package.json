@@ -37,7 +37,7 @@
     "underscore": "1.9.1"
   },
   "peerDependencies": {
-    "aws-sdk": ">=2.373.0"
+    "aws-sdk": ">=2.646.0"
   },
   "devDependencies": {
     "@silvermine/chai-strictly-equal": "1.0.0",

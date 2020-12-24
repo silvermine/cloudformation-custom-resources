@@ -27,6 +27,7 @@ resources = {
    ElasticSearchClusterSettings: require('./ElasticSearchClusterSettings'), // eslint-disable-line global-require
    ElasticSearchIndex: require('./ElasticSearchIndex'), // eslint-disable-line global-require
    ElasticSearchIndexAlias: require('./ElasticSearchIndexAlias'), // eslint-disable-line global-require
+   ElasticSearchPackage: require('./ElasticSearchPackage'), // eslint-disable-line global-require
 };
 
 module.exports = {
