@@ -48,7 +48,12 @@ module.exports = Class.extend({
                };
 
                if (responseBody) {
-                  data.body = JSON.parse(responseBody);
+                  try {
+                     data.body = JSON.parse(responseBody);
+                  } catch(e) {
+                     console.log('Invalid JSON body:', responseBody);
+                     throw e;
+                  }
                }
 
                if (response.statusCode === 200) {
