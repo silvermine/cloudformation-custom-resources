@@ -59,7 +59,7 @@ module.exports = Class.extend({
                if (response.statusCode === 200) {
                   deferred.resolve(data);
                } else {
-                  deferred.reject(data);
+                  deferred.reject(new Error('Request failed with ' + response.statusCode + '. Body: ' + JSON.stringify(data.body)));
                }
             });
 
