@@ -51,8 +51,8 @@ module.exports = Class.extend({
                   try {
                      data.body = JSON.parse(responseBody);
                   } catch(e) {
-                     console.log('Invalid JSON body:', responseBody);
-                     throw e;
+                     console.log('Invalid JSON body:', responseBody, e);
+                     deferred.reject(new Error('Request failed due to invalid JSON body. Raw Body: ' + responseBody));
                   }
                }
 
