@@ -42,7 +42,7 @@
   "devDependencies": {
     "@silvermine/chai-strictly-equal": "1.0.0",
     "@silvermine/eslint-config": "3.0.1",
-    "@silvermine/standardization": "1.0.1",
+    "@silvermine/standardization": "1.0.3",
     "chai": "4.2.0",
     "coveralls": "3.0.2",
     "eslint": "6.8.0",
