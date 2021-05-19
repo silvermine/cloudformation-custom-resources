@@ -4,3 +4,8 @@ Gruntfile.js
 tests/**
 .serverless
 coverage
+.nycrc.json
+.nyc_output
+.nvmrc
+.markdownlint.json
+commitlint.config.js
