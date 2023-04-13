@@ -13,7 +13,7 @@ script:
    - node --version
    - npm --version
    - commitlint-travis
-   - grunt standards
+   - npm run standards
    - npm test
 
 # For code coverage:
