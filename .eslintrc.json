@@ -5,6 +5,8 @@
    "rules": {
       "no-console": "off",
       "no-process-env": "off"
-   }
+   },
+
+  "ignorePatterns": [ "**/node_modules/**/*" ]
 
 }
