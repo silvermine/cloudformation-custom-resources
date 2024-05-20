@@ -6,7 +6,7 @@
   "scripts": {
     "commitlint": "commitlint --from 66cbf40",
     "check-node-version": "check-node-version --npm 10.5.0",
-    "test": "npm run check-node-version && nyc mocha -- -r ./tests/setup/before.js -R spec 'tests/**/*.test.js'",
+    "test": "nyc mocha -- -r ./tests/setup/before.js -R spec 'tests/**/*.test.js'",
     "markdownlint": "markdownlint -c .markdownlint.json -i CHANGELOG.md '{,!(node_modules)/**/}*.md'",
     "eslint": "eslint .",
     "standards": "npm run commitlint && npm run markdownlint && npm run eslint"
