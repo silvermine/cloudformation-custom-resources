@@ -44,7 +44,7 @@
     "aws-sdk": ">=2.646.0"
   },
   "devDependencies": {
-    "@silvermine/chai-strictly-equal": "1.0.0",
+    "@silvermine/chai-strictly-equal": "1.1.1",
     "@silvermine/eslint-config": "3.0.1",
     "@silvermine/standardization": "2.1.1",
     "chai": "4.2.0",
