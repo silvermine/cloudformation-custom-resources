@@ -56,7 +56,8 @@ module.exports = Class.extend({
                   }
                }
 
-               if (response.statusCode === 200) {
+               // 201 response is returned when creating an open search role
+               if ([ 200, 201 ].includes(response.statusCode)) {
                   deferred.resolve(data);
                } else {
                   deferred.reject(new Error('Request failed with ' + response.statusCode + '. Body: ' + JSON.stringify(data.body)));
