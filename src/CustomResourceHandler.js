@@ -28,6 +28,8 @@ resources = {
    ElasticSearchIndex: require('./ElasticSearchIndex'), // eslint-disable-line global-require
    ElasticSearchIndexAlias: require('./ElasticSearchIndexAlias'), // eslint-disable-line global-require
    ElasticSearchPackage: require('./ElasticSearchPackage'), // eslint-disable-line global-require
+   OpenSearchRole: require('./OpenSearchRole'), // eslint-disable-line global-require
+   OpenSearchRoleMapping: require('./OpenSearchRoleMapping'), // eslint-disable-line global-require
 };
 
 module.exports = {
