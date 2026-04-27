@@ -1,8 +1,6 @@
 'use strict';
 
 var _ = require('underscore'),
-    Q = require('q'),
-    url = require('url'),
     https = require('https'),
     Class = require('class.extend');
 
@@ -46,15 +44,15 @@ module.exports = Class.extend({
    },
 
    doCreate: function() {
-      return Q.when({});
+      return Promise.resolve({});
    },
 
    doUpdate: function() {
-      return Q.when({});
+      return Promise.resolve({});
    },
 
    doDelete: function() {
-      return Q.when({});
+      return Promise.resolve({});
    },
 
    normalizeResourceProperties: function(props) {
@@ -96,16 +94,15 @@ module.exports = Class.extend({
 
    _sendResponse: function(resp) {
       var body = JSON.stringify(resp),
-          parsedURL = url.parse(this._event.ResponseURL),
-          def = Q.defer(),
-          opts, req;
+          parsedURL = new URL(this._event.ResponseURL),
+          opts;
 
       console.log('Sending response to S3:', body);
 
       opts = {
          hostname: parsedURL.hostname,
          port: 443,
-         path: parsedURL.path,
+         path: parsedURL.pathname + parsedURL.search,
          method: 'PUT',
          headers: {
             'Content-Type': '',
@@ -113,25 +110,27 @@ module.exports = Class.extend({
          },
       };
 
-      req = https.request(opts, function(response) {
-         console.log('PUT response status:', response.statusCode);
-         console.log('PUT response headers:', JSON.stringify(response.headers));
-         def.resolve(resp);
+      return new Promise(function(resolve, reject) {
+         var req;
+
+         req = https.request(opts, function(response) {
+            console.log('PUT response status:', response.statusCode);
+            console.log('PUT response headers:', JSON.stringify(response.headers));
+            resolve(resp);
+         });
+
+         req.on('error', function(err) {
+            console.log('ERROR sending PUT request', err, err.stack);
+            reject(err);
+         });
+
+         req.on('end', function() {
+            console.log('end request');
+         });
+
+         req.write(body);
+         req.end();
       });
-
-      req.on('error', function(err) {
-         console.log('ERROR sending PUT request', err, err.stack);
-         def.reject(err);
-      });
-
-      req.on('end', function() {
-         console.log('end request');
-      });
-
-      req.write(body);
-      req.end();
-
-      return def.promise;
    },
 
 });

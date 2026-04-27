@@ -1,12 +1,17 @@
 'use strict';
 
 var _ = require('underscore'),
-    Q = require('q'),
-    AWS = require('aws-sdk'),
     util = require('util'),
-    dynamo = new AWS.DynamoDB(),
+    DynamoDB = require('@aws-sdk/client-dynamodb'),
+    dynamo = new DynamoDB.DynamoDBClient(),
     BaseResource = require('./BaseResource'),
     AWS_REGION = process.env.AWS_REGION;
+
+function _delay(ms) {
+   return new Promise(function(resolve) {
+      setTimeout(resolve, ms);
+   });
+}
 
 module.exports = BaseResource.extend({
 
@@ -53,248 +58,213 @@ module.exports = BaseResource.extend({
    // might not be available at that moment. Wait for a few seconds, and then try the
    // DescribeTable request again.
 
-   doCreate: function(props) {
+   doCreate: async function(props) {
       var tableName = props.GlobalTableName,
           allRegions = _.pluck(props.ReplicationGroup, 'RegionName'),
           copyTableRegions = _.chain(props.ReplicationGroup).pluck('RegionName').without(AWS_REGION).value();
 
       console.log('Pausing ten seconds before starting create for global table %s in regions %s', tableName, allRegions);
-      return Q.delay(10000)
-         .then(this._printDescriptionsOfTables.bind(this, tableName, [ AWS_REGION ])) // for helpful debugging
-         .then(this._ensureTableCopiedToRegions.bind(this, tableName, copyTableRegions))
-         .then(this._printDescriptionsOfTables.bind(this, tableName, allRegions)) // for helpful debugging
-         .then(this._ensureGlobalTableConsistent.bind(this, props));
+      await _delay(10000);
+      await this._printDescriptionsOfTables(tableName, [ AWS_REGION ]); // for helpful debugging
+      await this._ensureTableCopiedToRegions(tableName, copyTableRegions);
+      await this._printDescriptionsOfTables(tableName, allRegions); // for helpful debugging
+
+      return this._ensureGlobalTableConsistent(props);
    },
 
-   doUpdate: function(resourceID, props, oldProps) {
+   doUpdate: async function(resourceID, props, oldProps) {
       var tableName = props.GlobalTableName,
           allRegions = _.pluck(props.ReplicationGroup, 'RegionName'),
           oldRegions = _.pluck(oldProps.ReplicationGroup, 'RegionName'),
           copyTableRegions = _.without(allRegions, AWS_REGION),
-          oldCopyTableRegions = _.without(oldRegions, AWS_REGION);
+          oldCopyTableRegions = _.without(oldRegions, AWS_REGION),
+          globalTableCloudFormationResp, regionsToDelete;
 
       console.log('Pausing ten seconds before starting update for global table %s in regions %s', tableName, allRegions);
-      return Q.delay(10000)
-         .then(this._printDescriptionsOfTables.bind(this, tableName, [ AWS_REGION ])) // for helpful debugging
-         .then(this._ensureTableCopiedToRegions.bind(this, tableName, copyTableRegions))
-         .then(this._printDescriptionsOfTables.bind(this, tableName, _.uniq(allRegions.concat(oldRegions)))) // for helpful debugging
-         .then(this._ensureGlobalTableConsistent.bind(this, props))
-         .then(function(globalTableCloudFormationResp) {
-            var regionsToDelete = _.difference(oldCopyTableRegions, copyTableRegions);
+      await _delay(10000);
+      await this._printDescriptionsOfTables(tableName, [ AWS_REGION ]); // for helpful debugging
+      await this._ensureTableCopiedToRegions(tableName, copyTableRegions);
+      await this._printDescriptionsOfTables(tableName, _.uniq(allRegions.concat(oldRegions))); // for helpful debugging
+      globalTableCloudFormationResp = await this._ensureGlobalTableConsistent(props);
+      regionsToDelete = _.difference(oldCopyTableRegions, copyTableRegions);
 
-            if (props.DeleteUnneededTables) {
-               return this._removeTableFromRegions(tableName, regionsToDelete)
-                  .then(_.constant(globalTableCloudFormationResp));
-            }
+      if (props.DeleteUnneededTables) {
+         await this._removeTableFromRegions(tableName, regionsToDelete);
+         return globalTableCloudFormationResp;
+      }
 
-            console.log('Not deleting table %s from regions %s because DeleteUnneededTables was not truthy', tableName, regionsToDelete);
-            return globalTableCloudFormationResp;
-         }.bind(this));
+      console.log('Not deleting table %s from regions %s because DeleteUnneededTables was not truthy', tableName, regionsToDelete);
+      return globalTableCloudFormationResp;
    },
 
-   doDelete: function(resourceID, props) {
+   doDelete: async function(resourceID, props) {
       var tableName = props.GlobalTableName,
           copyTableRegions = _.chain(props.ReplicationGroup).pluck('RegionName').without(AWS_REGION).value();
 
       if (props.DeleteUnneededTables) {
-         return this._removeTableFromRegions(tableName, copyTableRegions)
-            .then(_.constant({ PhysicalResourceId: props.GlobalTableName }));
+         await this._removeTableFromRegions(tableName, copyTableRegions);
+         return { PhysicalResourceId: props.GlobalTableName };
       }
 
       console.log('Not deleting replica %s tables in %s because DeleteUnneededTables was not truthy', tableName, copyTableRegions);
-      return Q.when({ PhysicalResourceId: props.GlobalTableName });
+      return { PhysicalResourceId: props.GlobalTableName };
    },
 
-   _ensureTableCopiedToRegions: function(tableName, regions) {
-      var self = this;
+   _ensureTableCopiedToRegions: async function(tableName, regions) {
+      var masterDesc, tags;
 
       // Wait for the table to be in any state but DELETING:
-      return this._describeTableUntilState(tableName, AWS_REGION, [ 'CREATING', 'ACTIVE', 'UPDATING' ])
-         .then(function(masterDesc) {
-            if (!self._hasRequiredStreamSpec(masterDesc)) {
-               throw new Error('The master table ' + tableName + ' does not have the required NEW_AND_OLD_IMAGES stream enabled');
-            }
+      masterDesc = await this._describeTableUntilState(tableName, AWS_REGION, [ 'CREATING', 'ACTIVE', 'UPDATING' ]);
 
-            return self._listTags(AWS_REGION, masterDesc.TableArn)
-               .then(function(tags) {
-                  return Q.all(_.map(regions, self._ensureTableCopiedToRegion.bind(self, tableName, masterDesc, tags)));
-               });
-         });
-   },
-
-   _ensureTableCopiedToRegion: function(tableName, masterDesc, masterTags, region) {
-      var self = this,
-          dyn = new AWS.DynamoDB({ region: region });
-
-      return this._describeTable(tableName, region)
-         .then(function(copyDesc) {
-            var params;
-
-            if (copyDesc) {
-               params = self._makeUpdateTableParams(tableName, region, masterDesc, copyDesc);
-
-               if (params) {
-                  console.log('Updating a copy of DynamoDB table %s in %s: %j', tableName, region, params);
-                  return Q.ninvoke(dyn, 'updateTable', params);
-               }
-            } else {
-               params = self._makeCreateTableParamsFromDescription(masterDesc);
-               console.log('Creating a copy of DynamoDB table %s in %s: %j', tableName, region, params);
-               return Q.ninvoke(dyn, 'createTable', params);
-            }
-
-            return { TableDescription: copyDesc };
-         })
-         .then(function(createOrUpdateResp) {
-            var arn = createOrUpdateResp.TableDescription.TableArn;
-
-            return self._listTags(region, arn)
-               .then(function(copyTags) {
-                  if (_.isEqual(masterTags, copyTags)) {
-                     console.log('No change needed for tags on %s in %s: %j', tableName, region, copyTags);
-                     return;
-                  }
-
-                  console.log('Tagging table %s in %s with tags %j', tableName, region, masterTags);
-                  return Q.ninvoke(dyn, 'tagResource', { ResourceArn: arn, Tags: masterTags });
-               });
-         });
-   },
-
-   _listTags: function(region, arn) {
-      var def = Q.defer(),
-          dyn = (region === AWS_REGION) ? dynamo : new AWS.DynamoDB({ region: region }),
-          attempts = 0,
-          timeout = 2000;
-
-      function doOnce() {
-         attempts = attempts + 1;
-
-         return Q.ninvoke(dyn, 'listTagsOfResource', { ResourceArn: arn })
-            .catch(function(err) {
-               if (err.code === 'ResourceNotFoundException') {
-                  console.log('Could not list tags for %s because of ResourceNotFoundException', arn);
-                  return false;
-               }
-
-               throw err;
-            })
-            .then(function(tagsResp) {
-               if (tagsResp) {
-                  if (tagsResp.NextToken) {
-                     def.reject(new Error('Too many tags on table ' + arn + ' for this simplistic tag replication'));
-                     return;
-                  }
-
-                  def.resolve(tagsResp.Tags);
-                  return;
-               }
-
-               // We allow 15 attempts here (as opposed to 10 when waiting on tables in
-               // certain states) because it seems to take longer for the
-               // list-tags-of-resource operation to start showing a new table.
-               if (attempts < 15) {
-                  console.log('Will try listing tags for %s again in %s seconds', arn, (timeout / 1000));
-                  Q.delay(timeout).then(doOnce).done();
-                  timeout = Math.min(10000, timeout * 1.5);
-               } else {
-                  def.reject(new Error(util.format('ERROR: Exhausted all %d attempts waiting for %s to have tags', attempts, arn)));
-               }
-            })
-            .catch(def.reject.bind(def));
+      if (!this._hasRequiredStreamSpec(masterDesc)) {
+         throw new Error('The master table ' + tableName + ' does not have the required NEW_AND_OLD_IMAGES stream enabled');
       }
 
-      Q.nextTick(doOnce);
+      tags = await this._listTags(AWS_REGION, masterDesc.TableArn);
 
-      return def.promise;
+      return Promise.all(_.map(regions, this._ensureTableCopiedToRegion.bind(this, tableName, masterDesc, tags)));
+   },
+
+   _ensureTableCopiedToRegion: async function(tableName, masterDesc, masterTags, region) {
+      var dyn = new DynamoDB.DynamoDBClient({ region: region }),
+          copyDesc = await this._describeTable(tableName, region),
+          createOrUpdateResp, params, arn, copyTags;
+
+      if (copyDesc) {
+         params = this._makeUpdateTableParams(tableName, region, masterDesc, copyDesc);
+
+         if (params) {
+            console.log('Updating a copy of DynamoDB table %s in %s: %j', tableName, region, params);
+            createOrUpdateResp = await dyn.send(new DynamoDB.UpdateTableCommand(params));
+         } else {
+            createOrUpdateResp = { TableDescription: copyDesc };
+         }
+      } else {
+         params = this._makeCreateTableParamsFromDescription(masterDesc);
+         console.log('Creating a copy of DynamoDB table %s in %s: %j', tableName, region, params);
+         createOrUpdateResp = await dyn.send(new DynamoDB.CreateTableCommand(params));
+      }
+
+      arn = createOrUpdateResp.TableDescription.TableArn;
+      copyTags = await this._listTags(region, arn);
+
+      if (_.isEqual(masterTags, copyTags)) {
+         console.log('No change needed for tags on %s in %s: %j', tableName, region, copyTags);
+         return;
+      }
+
+      console.log('Tagging table %s in %s with tags %j', tableName, region, masterTags);
+      await dyn.send(new DynamoDB.TagResourceCommand({ ResourceArn: arn, Tags: masterTags }));
+   },
+
+   _listTags: async function(region, arn) {
+      var dyn = (region === AWS_REGION) ? dynamo : new DynamoDB.DynamoDBClient({ region: region }),
+          attempts = 0,
+          timeout = 2000,
+          tagsResp;
+
+      while (attempts < 15) {
+         attempts = attempts + 1;
+
+         try {
+            tagsResp = await dyn.send(new DynamoDB.ListTagsOfResourceCommand({ ResourceArn: arn }));
+         } catch(err) {
+            if (err.name === 'ResourceNotFoundException') {
+               console.log('Could not list tags for %s because of ResourceNotFoundException', arn);
+               tagsResp = false;
+            } else {
+               throw err;
+            }
+         }
+
+         if (tagsResp) {
+            if (tagsResp.NextToken) {
+               throw new Error('Too many tags on table ' + arn + ' for this simplistic tag replication');
+            }
+
+            return tagsResp.Tags;
+         }
+
+         // We allow 15 attempts here (as opposed to 10 when waiting on tables in
+         // certain states) because it seems to take longer for the
+         // list-tags-of-resource operation to start showing a new table.
+         console.log('Will try listing tags for %s again in %s seconds', arn, (timeout / 1000));
+         await _delay(timeout);
+         timeout = Math.min(10000, timeout * 1.5);
+      }
+
+      throw new Error(util.format('ERROR: Exhausted all %d attempts waiting for %s to have tags', attempts, arn));
    },
 
    _removeTableFromRegions: function(tableName, regions) {
-      var self = this;
-
       if (_.contains(regions, AWS_REGION)) {
          throw new Error('Should not delete table %s from master region %s', tableName, AWS_REGION);
       }
 
-      return Q.all(_.map(regions, function(region) {
-         var dyn = new AWS.DynamoDB({ region: region });
+      return Promise.all(_.map(regions, async function(region) {
+         var dyn = new DynamoDB.DynamoDBClient({ region: region }),
+             desc = await this._describeTable(tableName, region);
 
-         return self._describeTable(tableName, region)
-            .then(function(desc) {
-               if (desc) {
-                  console.log('Deleting table %s in region %s', tableName, region);
-                  return Q.ninvoke(dyn, 'deleteTable', { TableName: tableName })
-                     .then(function() {
-                        console.log('Done deleting table %s in region %s', tableName, region);
-                     });
-
-               }
-            });
-      }));
+         if (desc) {
+            console.log('Deleting table %s in region %s', tableName, region);
+            await dyn.send(new DynamoDB.DeleteTableCommand({ TableName: tableName }));
+            console.log('Done deleting table %s in region %s', tableName, region);
+         }
+      }.bind(this)));
    },
 
-   _describeTable: function(tableName, region) {
-      var dyn = (region === AWS_REGION) ? dynamo : new AWS.DynamoDB({ region: region });
+   _describeTable: async function(tableName, region) {
+      var dyn = (region === AWS_REGION) ? dynamo : new DynamoDB.DynamoDBClient({ region: region }),
+          resp;
 
-      return Q.ninvoke(dyn, 'describeTable', { TableName: tableName })
-         .catch(function(err) {
-            if (err.code === 'ResourceNotFoundException') {
-               console.log('Table %s does not exist in %s', tableName, region);
-               return false;
-            }
+      try {
+         resp = await dyn.send(new DynamoDB.DescribeTableCommand({ TableName: tableName }));
+      } catch(err) {
+         if (err.name === 'ResourceNotFoundException') {
+            console.log('Table %s does not exist in %s', tableName, region);
+            return false;
+         }
 
-            throw err;
-         })
-         .then(function(resp) {
-            return resp ? resp.Table : resp;
-         });
-   },
-
-   _describeTableUntilState: function(tableName, region, desiredStates) {
-      var self = this,
-          def = Q.defer(),
-          attempts = 0,
-          timeout = 2000;
-
-      function doOnce() {
-         attempts = attempts + 1;
-
-         return self._describeTable(tableName, region)
-            .then(function(desc) {
-               if (desc && _.contains(desiredStates, desc.TableStatus)) {
-                  // Have table, and it's in the desired state ... done!
-                  return def.resolve(desc);
-               } else if (desc) {
-                  // Have table, but not in valid state ... try again
-                  console.log('Table %s in %s currently %s (waiting for %s)', tableName, region, desc.TableStatus, desiredStates);
-               } else {
-                  // Don't have table yet ... try again
-                  console.log('Table %s in %s does not yet exist (waiting for it in %s state)', tableName, region, desiredStates);
-               }
-
-               if (attempts < 10) {
-                  console.log('Will try describing %s in %s again in %s seconds', tableName, region, (timeout / 1000));
-                  Q.delay(timeout).then(doOnce).done();
-                  timeout = Math.min(10000, timeout * 1.5);
-               } else {
-                  // eslint-disable-next-line max-len
-                  def.reject(new Error(util.format('ERROR: Exhausted all %d attempts waiting for %s:%s to be %s', attempts, tableName, region, desiredStates)));
-               }
-            })
-            .catch(def.reject.bind(def));
+         throw err;
       }
 
-      Q.nextTick(doOnce);
+      return resp.Table;
+   },
 
-      return def.promise;
+   _describeTableUntilState: async function(tableName, region, desiredStates) {
+      var attempts = 0,
+          timeout = 2000,
+          desc;
+
+      while (attempts < 10) {
+         attempts = attempts + 1;
+         desc = await this._describeTable(tableName, region);
+
+         if (desc && _.contains(desiredStates, desc.TableStatus)) {
+            // Have table, and it's in the desired state ... done!
+            return desc;
+         } else if (desc) {
+            // Have table, but not in valid state ... try again
+            console.log('Table %s in %s currently %s (waiting for %s)', tableName, region, desc.TableStatus, desiredStates);
+         } else {
+            // Don't have table yet ... try again
+            console.log('Table %s in %s does not yet exist (waiting for it in %s state)', tableName, region, desiredStates);
+         }
+
+         console.log('Will try describing %s in %s again in %s seconds', tableName, region, (timeout / 1000));
+         await _delay(timeout);
+         timeout = Math.min(10000, timeout * 1.5);
+      }
+
+      // eslint-disable-next-line max-len
+      throw new Error(util.format('ERROR: Exhausted all %d attempts waiting for %s:%s to be %s', attempts, tableName, region, desiredStates));
    },
 
    _printDescriptionsOfTables: function(tableName, regions) {
-      return Q.all(_.map(regions, function(region) {
-         return this._describeTable(tableName, region)
-            .then(function(resp) {
-               console.log('Table description for %s:%s: %j', tableName, region, resp);
-            });
+      return Promise.all(_.map(regions, async function(region) {
+         var resp = await this._describeTable(tableName, region);
+
+         console.log('Table description for %s:%s: %j', tableName, region, resp);
       }.bind(this)));
    },
 
@@ -449,34 +419,32 @@ module.exports = BaseResource.extend({
       return params;
    },
 
-   _ensureGlobalTableConsistent: function(props) {
-      var tableName = props.GlobalTableName;
+   _ensureGlobalTableConsistent: async function(props) {
+      var tableName = props.GlobalTableName,
+          desc = await this._describeGlobalTable(tableName);
 
-      return this._describeGlobalTable(tableName)
-         .then(function(desc) {
-            if (desc) {
-               return this._updateGlobalTable(props, desc);
-            }
+      if (desc) {
+         return this._updateGlobalTable(props, desc);
+      }
 
-            return this._createGlobalTable(props);
-         }.bind(this));
+      return this._createGlobalTable(props);
    },
 
-   _createGlobalTable: function(props) {
-      return this._waitForTablesCreatingOrActive(props.GlobalTableName, _.pluck(props.ReplicationGroup, 'RegionName'))
-         .then(function() {
-            var params = _.pick(props, 'GlobalTableName', 'ReplicationGroup');
+   _createGlobalTable: async function(props) {
+      var params, resp;
 
-            console.log('Creating global table: %j', params);
-            return Q.ninvoke(dynamo, 'createGlobalTable', params);
-         })
-         .then(function(resp) {
-            console.log('createGlobalTable response: %j', resp);
-            return { PhysicalResourceId: props.GlobalTableName, Arn: resp.GlobalTableDescription.GlobalTableArn };
-         });
+      await this._waitForTablesCreatingOrActive(props.GlobalTableName, _.pluck(props.ReplicationGroup, 'RegionName'));
+
+      params = _.pick(props, 'GlobalTableName', 'ReplicationGroup');
+      console.log('Creating global table: %j', params);
+
+      resp = await dynamo.send(new DynamoDB.CreateGlobalTableCommand(params));
+      console.log('createGlobalTable response: %j', resp);
+
+      return { PhysicalResourceId: props.GlobalTableName, Arn: resp.GlobalTableDescription.GlobalTableArn };
    },
 
-   _updateGlobalTable: function(props, desc) {
+   _updateGlobalTable: async function(props, desc) {
       var tableName = props.GlobalTableName,
           desiredRegions = _.pluck(props.ReplicationGroup, 'RegionName'),
           existingRegions = _.pluck(desc.ReplicationGroup, 'RegionName'),
@@ -497,15 +465,14 @@ module.exports = BaseResource.extend({
 
       if (_.isEmpty(params.ReplicaUpdates)) {
          console.log('No update needed for global table %s', tableName);
-         return Q.when({ PhysicalResourceId: props.GlobalTableName, Arn: desc.GlobalTableArn });
+         return { PhysicalResourceId: props.GlobalTableName, Arn: desc.GlobalTableArn };
       }
 
-      return this._waitForTablesCreatingOrActive(tableName, desiredRegions.concat(existingRegions))
-         .then(function() {
-            console.log('Updating global table %s with params: %j', tableName, params);
-            return Q.ninvoke(dynamo, 'updateGlobalTable', params);
-         })
-         .then(_.constant({ PhysicalResourceId: props.GlobalTableName, Arn: desc.GlobalTableArn }));
+      await this._waitForTablesCreatingOrActive(tableName, desiredRegions.concat(existingRegions));
+      console.log('Updating global table %s with params: %j', tableName, params);
+      await dynamo.send(new DynamoDB.UpdateGlobalTableCommand(params));
+
+      return { PhysicalResourceId: props.GlobalTableName, Arn: desc.GlobalTableArn };
    },
 
    _waitForTablesCreatingOrActive: function(tableName, regions) {
@@ -515,23 +482,24 @@ module.exports = BaseResource.extend({
       // then back to ACTIVE. If we happen to try to updateGlobalTable before the table is
       // ACTIVE, we will get an error.
       console.log('Waiting for %s in %s to be CREATING or ACTIVE', tableName, regions);
-      return Q.all(_.map(regions, function(region) {
+      return Promise.all(_.map(regions, function(region) {
          return this._describeTableUntilState(tableName, region, [ 'CREATING', 'ACTIVE' ]);
       }.bind(this)));
    },
 
-   _describeGlobalTable: function(tableName) {
-      return Q.ninvoke(dynamo, 'describeGlobalTable', { GlobalTableName: tableName })
-         .then(function(resp) {
-            return resp.GlobalTableDescription;
-         })
-         .catch(function(err) {
-            if (err.code === 'GlobalTableNotFoundException') {
-               return false;
-            }
+   _describeGlobalTable: async function(tableName) {
+      var resp;
 
-            throw err;
-         });
+      try {
+         resp = await dynamo.send(new DynamoDB.DescribeGlobalTableCommand({ GlobalTableName: tableName }));
+         return resp.GlobalTableDescription;
+      } catch(err) {
+         if (err.name === 'GlobalTableNotFoundException') {
+            return false;
+         }
+
+         throw err;
+      }
    },
 
 });
