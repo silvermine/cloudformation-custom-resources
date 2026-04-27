@@ -1,7 +1,6 @@
 'use strict';
 
-var Q = require('q'),
-    AWS = require('aws-sdk'),
+var { SNSClient, SubscribeCommand, UnsubscribeCommand } = require('@aws-sdk/client-sns'),
     BaseResource = require('./BaseResource');
 
 module.exports = BaseResource.extend({
@@ -14,7 +13,7 @@ module.exports = BaseResource.extend({
       if (resourceID.startsWith(`${this._event.LogicalResourceId}-`)) {
          console.log('no delete to handle - not a real subscription ARN');
 
-         return Q.when({});
+         return Promise.resolve({});
       }
 
       return this.deleteSubscription(resourceID);
@@ -34,30 +33,28 @@ module.exports = BaseResource.extend({
       return this.createSubscription(props.TopicArn, props.QueueArn);
    },
 
-   createSubscription: function(topicARN, queueARN) {
-      var sns = this._createSNS(topicARN);
+   createSubscription: async function(topicARN, queueARN) {
+      var sns = this._createSNS(topicARN),
+          resp;
 
       console.log('create for', JSON.stringify(this._event));
 
-      return Q.ninvoke(sns, 'subscribe', { Protocol: 'sqs', TopicArn: topicARN, Endpoint: queueARN })
-         .then(function(resp) {
-            console.log('subscribe response:', JSON.stringify(resp));
+      resp = await sns.send(new SubscribeCommand({ Protocol: 'sqs', TopicArn: topicARN, Endpoint: queueARN }));
+      console.log('subscribe response:', JSON.stringify(resp));
 
-            return { PhysicalResourceId: resp.SubscriptionArn, SubscriptionArn: resp.SubscriptionArn };
-         });
+      return { PhysicalResourceId: resp.SubscriptionArn, SubscriptionArn: resp.SubscriptionArn };
    },
 
-   deleteSubscription: function(resourceID) {
-      var sns = this._createSNS(resourceID);
+   deleteSubscription: async function(resourceID) {
+      var sns = this._createSNS(resourceID),
+          resp;
 
       console.log('delete for', JSON.stringify(this._event));
 
-      return Q.ninvoke(sns, 'unsubscribe', { SubscriptionArn: resourceID })
-         .then(function(resp) {
-            console.log('unsubscribe response:', JSON.stringify(resp));
+      resp = await sns.send(new UnsubscribeCommand({ SubscriptionArn: resourceID }));
+      console.log('unsubscribe response:', JSON.stringify(resp));
 
-            return {};
-         });
+      return {};
    },
 
    _createSNS: function(likeARN) {
@@ -66,7 +63,7 @@ module.exports = BaseResource.extend({
 
       console.log('creating SNS for region "%s" from ARN-like string "%s"', region, likeARN);
 
-      return new AWS.SNS({ region: region });
+      return new SNSClient({ region: region });
    },
 
 });

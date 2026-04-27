@@ -1,16 +1,16 @@
 'use strict';
 
 var _ = require('underscore'),
-    Q = require('q'),
-    AWS = require('aws-sdk'),
-    ses = new AWS.SES(),
+    { SESClient, SetActiveReceiptRuleSetCommand } = require('@aws-sdk/client-ses'),
+    ses = new SESClient(),
     BaseResource = require('./BaseResource');
 
 module.exports = BaseResource.extend({
 
-   doCreate: function(props) {
-      return Q.ninvoke(ses, 'setActiveReceiptRuleSet', _.pick(props, 'RuleSetName'))
-         .thenResolve({ PhysicalResourceId: props.RuleSetName });
+   doCreate: async function(props) {
+      await ses.send(new SetActiveReceiptRuleSetCommand(_.pick(props, 'RuleSetName')));
+
+      return { PhysicalResourceId: props.RuleSetName };
    },
 
    doUpdate: function(resourceID, props) {
