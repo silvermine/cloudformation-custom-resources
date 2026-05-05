@@ -27,22 +27,11 @@ provider:
       SLS_SVC_NAME: ${self:service}
       SLS_STAGE: ${self:custom.stage}
    iamRoleStatements:
-      # Permissions needed for various services:
-      # We know that APIGatewayDomainName requires this, and likely other resources do as
-      # well. See
-      # https://aws.amazon.com/blogs/security/introducing-an-easier-way-to-delegate-permissions-to-aws-services-service-linked-roles/
+      # Required by DynamoDB Global Tables on first creation in a region.
       -
          Effect: 'Allow'
          Action:
             - 'iam:CreateServiceLinkedRole'
-         Resource:
-            - '*'
-      # Permissions needed for SNSSQSSubscription:
-      -
-         Effect: 'Allow'
-         Action:
-            - 'sns:Subscribe'
-            - 'sns:Unsubscribe'
          Resource:
             - '*'
       # Permissions needed for DynamoDBGlobalTable:
@@ -73,31 +62,6 @@ provider:
          Effect: 'Allow'
          Action:
             - 'ses:SetActiveReceiptRuleSet'
-         Resource:
-            - '*'
-      # Permissions needed for APIGatewayDomainName:
-      -
-         Effect: 'Allow'
-         Action:
-            - 'apigateway:*'
-         Resource:
-            - '*'
-      # Permissions needed for ELBTargetGroup:
-      -
-         Effect: 'Allow'
-         Action:
-            - 'elasticloadbalancing:CreateTargetGroup'
-            - 'elasticloadbalancing:DeleteTargetGroup'
-            - 'elasticloadbalancing:ModifyTargetGroup'
-            - 'elasticloadbalancing:ModifyTargetGroupAttributes'
-         Resource:
-            - '*'
-      # Permissions needed for ELBTargetGroupLambdaTarget:
-      -
-         Effect: 'Allow'
-         Action:
-            - 'elasticloadbalancing:RegisterTargets'
-            - 'elasticloadbalancing:DeregisterTargets'
          Resource:
             - '*'
 

@@ -1,26 +1,36 @@
 'use strict';
 
-var _ = require('underscore'),
-    Q = require('q'),
-    AWS = require('aws-sdk'),
-    ses = new AWS.SES(),
-    BaseResource = require('./BaseResource');
+const _ = require('underscore'),
+      BaseResource = require('./BaseResource');
 
-module.exports = BaseResource.extend({
+const {
+   SESClient,
+   VerifyDomainIdentityCommand,
+   DeleteIdentityCommand,
+} = require('@aws-sdk/client-ses');
 
-   doCreate: function(props) {
-      return Q.ninvoke(ses, 'verifyDomainIdentity', _.pick(props, 'Domain'))
-         .then(function(resp) {
-            return { PhysicalResourceId: props.Domain, VerificationToken: resp.VerificationToken };
-         });
-   },
+const ses = new SESClient({});
 
-   doDelete: function(resourceID) {
-      return Q.ninvoke(ses, 'deleteIdentity', { Identity: resourceID });
-   },
+class SimpleEmailServiceDomainVerification extends BaseResource {
 
-   doUpdate: function(resourceID, props, oldProps) {
-      return this.doDelete(oldProps.Domain).then(this.doCreate.bind(this, props));
-   },
+   async doCreate(props) {
+      const resp = await ses.send(new VerifyDomainIdentityCommand(_.pick(props, 'Domain')));
 
-});
+      return { PhysicalResourceId: props.Domain, VerificationToken: resp.VerificationToken };
+   }
+
+   async doDelete(resourceID) {
+      await ses.send(new DeleteIdentityCommand({ Identity: resourceID }));
+
+      return { PhysicalResourceId: resourceID };
+   }
+
+   async doUpdate(resourceID, props, oldProps) {
+      await this.doDelete(oldProps.Domain);
+
+      return this.doCreate(props);
+   }
+
+}
+
+module.exports = SimpleEmailServiceDomainVerification;

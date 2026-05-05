@@ -1,20 +1,23 @@
 'use strict';
 
-var _ = require('underscore'),
-    Q = require('q'),
-    AWS = require('aws-sdk'),
-    ses = new AWS.SES(),
-    BaseResource = require('./BaseResource');
+const _ = require('underscore'),
+      { SESClient, SetActiveReceiptRuleSetCommand } = require('@aws-sdk/client-ses'),
+      BaseResource = require('./BaseResource');
 
-module.exports = BaseResource.extend({
+const ses = new SESClient({});
 
-   doCreate: function(props) {
-      return Q.ninvoke(ses, 'setActiveReceiptRuleSet', _.pick(props, 'RuleSetName'))
-         .thenResolve({ PhysicalResourceId: props.RuleSetName });
-   },
+class SimpleEmailServiceRuleSetActivation extends BaseResource {
 
-   doUpdate: function(resourceID, props) {
+   async doCreate(props) {
+      await ses.send(new SetActiveReceiptRuleSetCommand(_.pick(props, 'RuleSetName')));
+
+      return { PhysicalResourceId: props.RuleSetName };
+   }
+
+   async doUpdate(resourceID, props) {
       return this.doCreate(props);
-   },
+   }
 
-});
+}
+
+module.exports = SimpleEmailServiceRuleSetActivation;
